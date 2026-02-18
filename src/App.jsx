@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+// AJOUT : Imports nécessaires pour la navigation
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import './App.css'
 
 const API_BASE_URL =
@@ -52,8 +54,35 @@ async function request(endpoint, options = {}, token) {
   return data
 }
 
-function App() {
-  const [mode, setMode] = useState('login')
+// --- AJOUT : NOUVELLE PAGE D'ACCUEIL ---
+function Home() {
+  return (
+    <main className="auth-shell">
+      <section className="auth-card" style={{ textAlign: 'center' }}>
+        <div className="auth-top">
+          <p className="eyebrow">Projet DevOps</p>
+          <h1>Bienvenue</h1>
+          <p className="subtitle">Gérez vos événements étudiants.</p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
+          {/* Ces liens activent ton application avec le bon mode grâce au hash # */}
+          <Link to="/app" className="primary-btn" style={{ textDecoration: 'none', lineHeight: '40px' }}>
+            Se connecter
+          </Link>
+          <Link to="/app#register" className="secondary-btn" style={{ textDecoration: 'none', lineHeight: '40px' }}>
+            Créer un compte
+          </Link>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+// --- TON CODE ORIGINAL (Renommé 'App' -> 'Platform') ---
+function Platform() {
+  // MODIFICATION MINIME : On regarde le # dans l'URL pour savoir si on commence en 'register'
+  const [mode, setMode] = useState(window.location.hash === '#register' ? 'register' : 'login')
+  
   const [activeTab, setActiveTab] = useState('events')
   const [loginData, setLoginData] = useState({ email: '', password: '' })
   const [registerData, setRegisterData] = useState({
@@ -653,7 +682,9 @@ function App() {
     <main className="auth-shell">
       <section className="auth-card">
         <div className="auth-top">
-          <p className="eyebrow">Projet DevOps</p>
+          {/* AJOUT : Un lien pour revenir à l'accueil */}
+          <Link to="/" style={{ textDecoration: 'none', color: '#666' }}>&larr; Retour accueil</Link>
+          <p className="eyebrow" style={{marginTop:'10px'}}>Projet DevOps</p>
           <h1>Plateforme D'evenement</h1>
           <p className="subtitle">
             Inscription et connexion des etudiants a la plateforme.
@@ -741,4 +772,14 @@ function App() {
   )
 }
 
-export default App
+// --- AJOUT : NOUVEAU COMPOSANT PRINCIPAL (ROUTER) ---
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/app" element={<Platform />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
