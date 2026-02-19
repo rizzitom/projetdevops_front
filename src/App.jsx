@@ -117,6 +117,31 @@ function Platform() {
     [mode, loginData, registerData],
   )
   const isAdmin = auth?.user?.role === 'ADMIN'
+  const currentUserStudent = useMemo(() => {
+    if (!auth?.user || students.length === 0) return null
+
+    const userEmail = auth.user.email?.trim().toLowerCase()
+    if (userEmail) {
+      const matchedByEmail = students.find(
+        (student) => student.email?.trim().toLowerCase() === userEmail,
+      )
+      if (matchedByEmail) return matchedByEmail
+    }
+
+    const userFullName = auth.user.name?.trim().toLowerCase()
+    if (userFullName) {
+      return (
+        students.find((student) => {
+          const fullName = `${student.firstName ?? ''} ${student.lastName ?? ''}`
+            .trim()
+            .toLowerCase()
+          return fullName === userFullName
+        }) ?? null
+      )
+    }
+
+    return null
+  }, [auth, students])
 
   async function loadData(currentAuth) {
     if (!currentAuth?.token) return
@@ -208,6 +233,11 @@ function Platform() {
     setActiveTab('events')
     setError('')
     setNotice('')
+  }
+
+  function isEventSubscribed(eventItem) {
+    if (isAdmin) return false
+    return Boolean(eventItem?.isSubscribed)
   }
 
   function updateStudentFormField(event) {
@@ -338,9 +368,15 @@ function Platform() {
   }
 
   async function subscribeToEvent(eventId) {
-    const studentId = selectedStudentIdByEvent[eventId]
+    const studentId = isAdmin
+      ? selectedStudentIdByEvent[eventId]
+      : currentUserStudent?.id
     if (!studentId) {
-      setError('Selectionne un etudiant pour l inscription.')
+      setError(
+        isAdmin
+          ? 'Selectionne un etudiant pour l inscription.'
+          : 'Ton compte utilisateur n est pas relie a un etudiant.',
+      )
       return
     }
 
@@ -353,6 +389,7 @@ function Platform() {
         { method: 'POST' },
         auth?.token,
       )
+      await loadData(auth)
       setNotice('Inscription effectuee.')
     } catch (actionError) {
       setError(actionError.message)
@@ -362,9 +399,15 @@ function Platform() {
   }
 
   async function unsubscribeFromEvent(eventId) {
-    const studentId = selectedStudentIdByEvent[eventId]
+    const studentId = isAdmin
+      ? selectedStudentIdByEvent[eventId]
+      : currentUserStudent?.id
     if (!studentId) {
-      setError('Selectionne un etudiant pour la desinscription.')
+      setError(
+        isAdmin
+          ? 'Selectionne un etudiant pour la desinscription.'
+          : 'Ton compte utilisateur n est pas relie a un etudiant.',
+      )
       return
     }
 
@@ -377,6 +420,7 @@ function Platform() {
         { method: 'DELETE' },
         auth?.token,
       )
+      await loadData(auth)
       setNotice('Desinscription effectuee.')
     } catch (actionError) {
       setError(actionError.message)
@@ -434,7 +478,11 @@ function Platform() {
           {contentLoading ? <p className="home-empty">Chargement...</p> : null}
 
           {activeTab === 'events' ? (
-            <section className="content-grid">
+            <section
+              className={
+                isAdmin ? 'content-grid' : 'content-grid content-grid-full'
+              }
+            >
               {isAdmin ? (
                 <form className="panel-form" onSubmit={handleEventSubmit}>
                   <h2>{editingEventId ? 'Modifier evenement' : 'Creer evenement'}</h2>
@@ -501,89 +549,121 @@ function Platform() {
 
               <div className="panel-list">
                 <h2>Liste des evenements</h2>
+                <p className="panel-subtitle">
+                  {events.length} evenement{events.length > 1 ? 's' : ''} visible
+                  {events.length > 1 ? 's' : ''}.
+                </p>
                 {events.length === 0 ? (
                   <p className="home-empty">Aucun evenement pour le moment.</p>
                 ) : (
-                  <div className="item-list">
-                    {events.map((eventItem) => (
-                      <article className="item-card" key={eventItem.id}>
-                        <p className="item-title">
-                          {eventItem.title}{' '}
-                          <span className="item-badge">{eventItem.status}</span>
-                        </p>
-                        <p className="item-meta">{formatDate(eventItem.date)}</p>
-                        {eventItem.location ? (
-                          <p className="item-meta">Lieu: {eventItem.location}</p>
-                        ) : null}
-                        {eventItem.description ? (
-                          <p className="item-text">{eventItem.description}</p>
-                        ) : null}
-
-                        <label className="inline-label">
-                          Etudiant
-                          <select
-                            value={selectedStudentIdByEvent[eventItem.id] ?? ''}
-                            onChange={(evt) =>
-                              setSelectedStudentIdByEvent((previous) => ({
-                                ...previous,
-                                [eventItem.id]: evt.target.value,
-                              }))
-                            }
-                          >
-                            <option value="">Choisir un etudiant</option>
-                            {students.map((student) => (
-                              <option key={student.id} value={student.id}>
-                                {student.firstName} {student.lastName}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-
-                        <div className="item-actions">
-                          <button
-                            type="button"
-                            className="secondary-btn"
-                            onClick={() => subscribeToEvent(eventItem.id)}
-                            disabled={loading || eventItem.status === 'CANCELED'}
-                          >
-                            Inscrire
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-btn"
-                            onClick={() => unsubscribeFromEvent(eventItem.id)}
-                            disabled={loading}
-                          >
-                            Desinscrire
-                          </button>
-                          {isAdmin ? (
-                            <>
-                              <button
-                                type="button"
-                                className="secondary-btn"
-                                onClick={() => startEditEvent(eventItem)}
-                              >
-                                Modifier
-                              </button>
-                              <button
-                                type="button"
-                                className="secondary-btn danger"
-                                onClick={() => cancelEvent(eventItem.id)}
-                                disabled={loading || eventItem.status === 'CANCELED'}
-                              >
-                                Annuler evenement
-                              </button>
-                            </>
+                  <div className="item-list item-list-events">
+                    {events.map((eventItem) => {
+                      const isSubscribed = isEventSubscribed(eventItem)
+                      return (
+                        <article
+                          className={
+                            isSubscribed
+                              ? 'item-card item-card-subscribed'
+                              : 'item-card'
+                          }
+                          key={eventItem.id}
+                        >
+                          <p className="item-title">
+                            {eventItem.title}{' '}
+                            <span className="item-badge">{eventItem.status}</span>
+                          </p>
+                          {isSubscribed ? (
+                            <p className="item-subscribed-pill">Inscrit</p>
                           ) : null}
-                        </div>
-                      </article>
-                    ))}
+                          <p className="item-meta">{formatDate(eventItem.date)}</p>
+                          {eventItem.location ? (
+                            <p className="item-meta">Lieu: {eventItem.location}</p>
+                          ) : null}
+                          {eventItem.description ? (
+                            <p className="item-text">{eventItem.description}</p>
+                          ) : null}
+
+                        {isAdmin ? (
+                          <label className="inline-label">
+                            Etudiant
+                            <select
+                              value={selectedStudentIdByEvent[eventItem.id] ?? ''}
+                              onChange={(evt) =>
+                                setSelectedStudentIdByEvent((previous) => ({
+                                  ...previous,
+                                  [eventItem.id]: evt.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Choisir un etudiant</option>
+                              {students.map((student) => (
+                                <option key={student.id} value={student.id}>
+                                  {student.firstName} {student.lastName}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : currentUserStudent ? (
+                          <p className="item-meta item-meta-strong">
+                            Etudiant associe: {currentUserStudent.firstName}{' '}
+                            {currentUserStudent.lastName}
+                          </p>
+                        ) : (
+                          <p className="item-inline-warning">
+                            Aucun etudiant associe a ce compte.
+                          </p>
+                        )}
+
+                          <div className="item-actions">
+                            <button
+                              type="button"
+                              className="secondary-btn"
+                              onClick={() => subscribeToEvent(eventItem.id)}
+                              disabled={loading || eventItem.status === 'CANCELED'}
+                            >
+                              Inscrire
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-btn"
+                              onClick={() => unsubscribeFromEvent(eventItem.id)}
+                              disabled={loading}
+                            >
+                              Desinscrire
+                            </button>
+                            {isAdmin ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="secondary-btn"
+                                  onClick={() => startEditEvent(eventItem)}
+                                >
+                                  Modifier
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-btn danger"
+                                  onClick={() => cancelEvent(eventItem.id)}
+                                  disabled={loading || eventItem.status === 'CANCELED'}
+                                >
+                                  Annuler evenement
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </article>
+                      )
+                    })}
                   </div>
                 )}
               </div>
             </section>
           ) : (
-            <section className="content-grid">
+            <section
+              className={
+                isAdmin ? 'content-grid' : 'content-grid content-grid-full'
+              }
+            >
               {isAdmin ? (
                 <form className="panel-form" onSubmit={handleStudentSubmit}>
                   <h2>{editingStudentId ? 'Modifier etudiant' : 'Creer etudiant'}</h2>
@@ -637,10 +717,14 @@ function Platform() {
 
               <div className="panel-list">
                 <h2>Liste des etudiants</h2>
+                <p className="panel-subtitle">
+                  {students.length} etudiant{students.length > 1 ? 's' : ''}{" "}
+                  enregistre{students.length > 1 ? 's' : ''}.
+                </p>
                 {students.length === 0 ? (
                   <p className="home-empty">Aucun etudiant pour le moment.</p>
                 ) : (
-                  <div className="item-list">
+                  <div className="item-list item-list-students">
                     {students.map((student) => (
                       <article className="item-card" key={student.id}>
                         <p className="item-title">
